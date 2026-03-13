@@ -1,0 +1,64 @@
+name: Zendesk Google Review Sync
+
+on:
+  schedule:
+    - cron: "15 2 * * *"
+  workflow_dispatch:
+    inputs:
+      from_date:
+        description: "From date (YYYY-MM-DD), inclusive"
+        required: false
+        type: string
+      to_date:
+        description: "To date (YYYY-MM-DD), inclusive"
+        required: false
+        type: string
+      dry_run:
+        description: "Run without updating tickets"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  sync-google-review-text:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      ZENDESK_SUBDOMAIN: ${{ secrets.ZENDESK_SUBDOMAIN }}
+      ZENDESK_EMAIL: ${{ secrets.ZENDESK_EMAIL }}
+      ZENDESK_API_TOKEN: ${{ secrets.ZENDESK_API_TOKEN }}
+      TARGET_CUSTOM_FIELD_ID: "34603570445085"
+      ZENDESK_VIA_VALUE: "google_my_business"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run sync script
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARGS=()
+
+          FROM_INPUT="${{ github.event.inputs.from_date }}"
+          TO_INPUT="${{ github.event.inputs.to_date }}"
+          DRY_RUN_INPUT="${{ github.event.inputs.dry_run }}"
+
+          if [[ -n "${FROM_INPUT}" || -n "${TO_INPUT}" ]]; then
+            if [[ -z "${FROM_INPUT}" || -z "${TO_INPUT}" ]]; then
+              echo "Both from_date and to_date must be provided together."
+              exit 1
+            fi
+            ARGS+=(--from-date "${FROM_INPUT}" --to-date "${TO_INPUT}")
+          fi
+
+          if [[ "${DRY_RUN_INPUT}" == "true" ]]; then
+            ARGS+=(--dry-run)
+          fi
+
+          python scripts/sync_google_reviews.py "${ARGS[@]}"
